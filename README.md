@@ -10,5 +10,5 @@ In order to set up production package:
 - Specify `branches` in the `.github/workflows/release.yml` release workflow
 - Push the code into the specified branch
 
-> *info*
-> Don't forget to use *semantic commits* since the release version (and the fact if the release itself is needed) is determined on base of the added commits' names.
+> **Note**
+> Don't forget to use [*semantic commit messages*](https://github.com/semantic-release/semantic-release/blob/master/README.md#commit-message-format) since the release version (and the fact if the release itself is needed) is determined on base of the added commits' names.

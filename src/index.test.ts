@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import something from '.'
 
 /**
- * Test your code
+ * FIXME: Test your code
  */
 describe.concurrent('index', () => {
   test('should be `true`', async () => {
