@@ -26,6 +26,7 @@
   ],
   "main": "./dist/index.cjs",
   "types": "./dist/index.d.ts",
+  "dependencies": {},
   "devDependencies": {
     "@antfu/eslint-config": "^0.26.2",
     "@antfu/ni": "^0.17.2",
@@ -57,9 +58,5 @@
     "*.{js,ts,tsx,vue}": [
       "eslint --fix"
     ]
-  },
-  "dependencies": {
-    "ethers": "^6.0.3",
-    "ofetch": "^1.0.0"
   }
 }
