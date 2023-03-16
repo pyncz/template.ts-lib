@@ -1,4 +1,4 @@
-# @wiiib/template.ts-lib
+# @pyncz/template.ts-lib
 
 A template for creating TypeScript NPM packages.
 
