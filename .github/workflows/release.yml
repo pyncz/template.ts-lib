@@ -7,7 +7,6 @@ on:
 
 jobs:
   notify_start:
-    if: ${{ secrets.TELEGRAM_CHAT_ID && secrets.TELEGRAM_BOT_TOKEN }}
     name: Notify about start releasing
     runs-on: ubuntu-latest
     steps:
@@ -19,11 +18,39 @@ jobs:
           message: |
             🚀 Creating release for ${{ github.repository }}...
 
-  build:
-    runs-on: ubuntu-18.04
+  check:
+    name: Check if the new release is needed
+    runs-on: ubuntu-latest
     outputs:
-      published: ${{ steps.release.outputs.new-release-published }}
-      version: ${{ steps.release.outputs.release-version }}
+      tag: ${{ steps.bump.outputs.new_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check new version
+        id: bump
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          dry_run: true
+
+      - name: Log new version
+        if: ${{ steps.bump.outputs.new_tag }}
+        run: echo "🚀 New version ${{ steps.bump.outputs.new_tag }} is about to get published..."
+
+      - name: Log skipping of new version
+        if: ${{ !steps.bump.outputs.new_tag }}
+        run: echo "🌚 Release not needed."
+
+  build:
+    if: ${{ needs.check.outputs.tag }}
+    name: Build and publish
+    runs-on: ubuntu-latest
+    needs:
+      - check
     strategy:
       matrix:
         node-version: [16.x]
@@ -53,38 +80,66 @@ jobs:
       - name: Test
         run: |
           pnpm run test
-        env:
-          VITE_INFURA_PROJECT_ID: ${{ secrets.INFURA_PROJECT_ID }}
 
       - name: Build artifacts
         run: |
           pnpm run build
 
       - name: Semantic release
-        id: release
         run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  notify_end:
-    if: ${{ secrets.TELEGRAM_CHAT_ID && secrets.TELEGRAM_BOT_TOKEN }}
-    name: Notify about finish releasing
+  notify_failure:
+    if: ${{ failure() }}
+    name: Notify about workflow failed
     runs-on: ubuntu-latest
     needs:
       - build
     steps:
-      - name: Notification about publishing
-        if: ${{ needs.build.outputs.published }}
+      - name: Notification about release failed
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            ✨ Release for ${{ github.repository }}@${{ needs.build.outputs.version }} has been created!
+            🚨 Workflow failed!
+
+  notify_cancelled:
+    if: ${{ cancelled() }}
+    name: Notify about workflow cancelled
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - name: Notification about release cancelled
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ✋ Workflow cancelled.
+
+  notify_end:
+    if: ${{ success() }}
+    name: Notify about releasing results
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - check
+    steps:
+      - name: Notification about publishing
+        if: ${{ needs.check.outputs.tag }}
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ✨ Release for ${{ github.repository }}@${{ needs.check.outputs.tag }} has been created!
 
       - name: Notification about skipping
-        if: ${{ !needs.build.outputs.published }}
+        if: ${{ !needs.check.outputs.tag }}
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
