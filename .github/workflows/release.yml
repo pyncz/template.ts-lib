@@ -10,19 +10,19 @@ jobs:
     name: Notify about start releasing
     runs-on: ubuntu-latest
     steps:
-      - name: Send notification
-        uses: appleboy/telegram-action@master
+      - uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
-            🚀 Creating release for ${{ github.repository }}...
+            🚀 Starting workflow for ${{ github.repository }}...
 
   check:
     name: Check if the new release is needed
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.bump.outputs.new_tag }}
+      will-publish: ${{ steps.version.outputs.new-release-published }}
+      new-version: ${{ steps.version.outputs.release-version }}
 
     steps:
       - name: Checkout
@@ -31,22 +31,24 @@ jobs:
           fetch-depth: 0
 
       - name: Check new version
-        id: bump
-        uses: mathieudutour/github-tag-action@v6.1
+        id: version
+        uses: codfish/semantic-release-action@v2
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           dry_run: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Log new version
-        if: ${{ steps.bump.outputs.new_tag }}
-        run: echo "🚀 New version ${{ steps.bump.outputs.new_tag }} is about to get published..."
+        if: ${{ steps.version.outputs.new-release-published == 'true' }}
+        run: echo "🚀 New version ${{ steps.version.outputs.release-version }} is about to get published..."
 
       - name: Log skipping of new version
-        if: ${{ !steps.bump.outputs.new_tag }}
+        if: ${{ steps.version.outputs.new-release-published == 'false' }}
         run: echo "🌚 Release not needed."
 
   build:
-    if: ${{ needs.check.outputs.tag }}
+    if: ${{ needs.check.outputs.will-publish == 'true' }}
     name: Build and publish
     runs-on: ubuntu-latest
     needs:
@@ -86,7 +88,7 @@ jobs:
           pnpm run build
 
       - name: Semantic release
-        run: npx semantic-release
+        uses: codfish/semantic-release-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -98,8 +100,7 @@ jobs:
     needs:
       - build
     steps:
-      - name: Notification about release failed
-        uses: appleboy/telegram-action@master
+      - uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -113,36 +114,40 @@ jobs:
     needs:
       - build
     steps:
-      - name: Notification about release cancelled
-        uses: appleboy/telegram-action@master
+      - uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
             ✋ Workflow cancelled.
 
-  notify_end:
-    if: ${{ success() }}
-    name: Notify about releasing results
+  notify_result_skipped:
+    if: ${{ needs.check.outputs.will-publish == 'false' }}
+    name: Notify about skipping
     runs-on: ubuntu-latest
     needs:
-      - build
+      - notify_start
       - check
     steps:
-      - name: Notification about publishing
-        if: ${{ needs.check.outputs.tag }}
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            ✨ Release for ${{ github.repository }}@${{ needs.check.outputs.tag }} has been created!
-
-      - name: Notification about skipping
-        if: ${{ !needs.check.outputs.tag }}
-        uses: appleboy/telegram-action@master
+      - uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
             🌚 Ended without a new release for ${{ github.repository }}
+
+  notify_result_published:
+    if: ${{ needs.check.outputs.will-publish == 'true' }}
+    name: Notify about publishing
+    runs-on: ubuntu-latest
+    needs:
+      - notify_start
+      - check
+      - build
+    steps:
+      - uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ✨ Release for ${{ github.repository }}@${{ needs.check.outputs.new-version }} has been created!
